@@ -1,21 +1,13 @@
+import aiogram
 import easyocr
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils.callback_data import CallbackData, InlineKeyboardBuilder
+from aiogram import Bot, Dispatcher, executor, types
 from aiogram.utils.exceptions import MessageTextIsEmpty
-from gtts import gTTS
-from translate import Translator
 
 
 TOKEN_API = '6210740611:AAFzDF02G1NEQbwqFJMq6gvp4Qrf8KswVD8'
 
-language = 'ru'
 bot = Bot(TOKEN_API)
 dp = Dispatcher(bot)
-
-
-class MyCallback(CallbackData, prefix="my"):
-    foo: str
-    bar: int
 
 
 def text_recognition(file_path):
@@ -25,22 +17,6 @@ def text_recognition(file_path):
     for line in result1:
         text1 += f"{line}\n\n"
     return text1
-
-
-def text_to_speech(txt, language):
-    translation = Translator(to_lang=language).translate(txt)  # Перевод текста на русский язык
-    tts = gTTS(text=translation, lang=language)  # Озвучка текста на выбранном языке
-    tts.save("InputMP3file.mp3")  # Сохранение мп3 файла
-    return "InputMP3file.mp3"  # Возвращение текста для его открытия
-
-
-def create_keyboard():
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="demo",
-        callback_data=MyCallback(foo="demo", bar="42")
-        # Value can be not packed to string inplace, because builder knows what to do with callback instance
-    )
 
 
 async def on_startup(_):
@@ -82,4 +58,4 @@ async def handle_photo(message):
 
 
 if __name__ == "__main__":
-    dp.start_polling(skip_updates=True)
+    executor.start_polling(dp, skip_updates=True)
