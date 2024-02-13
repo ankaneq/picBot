@@ -1,5 +1,7 @@
 import asyncio
 import easyocr
+
+
 from gtts import gTTS
 from translate import Translator
 
@@ -7,6 +9,9 @@ from aiogram import Bot, types, Dispatcher, F
 from aiogram.types.input_file import FSInputFile
 from aiogram.filters import CommandStart, Filter
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters.callback_data import CallbackData
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from aiogram.types import CallbackQuery
 
 
 # Bot token
@@ -35,7 +40,26 @@ def text_recognition(file_path):
     return text1
 
 
-class ChangeLanguage(Filter):
+def keyboard():
+    builder = ReplyKeyboardBuilder()
+
+    for i in ['/commands', '/start', '/clear', '/change_language', '/switch_audio_text_output', '/keyboard']:
+        builder.button(text=i)
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def inline_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="keyboard",
+        callback_data=MyCallback(foo="keyboard", bar="42")
+        # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
+    return builder.as_markup()
+
+
+class Command(Filter):
     def __init__(self, my_text: str) -> None:
         self.my_text = my_text
 
@@ -43,36 +67,31 @@ class ChangeLanguage(Filter):
         return message.text == self.my_text
 
 
-class ClearCommand(Filter):
-    def __init__(self, my_text: str) -> None:
-        self.my_text = my_text
-
-    async def __call__(self, message: types.Message) -> bool:
-        return message.text == self.my_text
+class MyCallback(CallbackData, prefix="my"):
+    foo: str
+    bar: int
 
 
-class AllCommands(Filter):
-    def __init__(self, my_text: str) -> None:
-        self.my_text = my_text
-
-    async def __call__(self, message: types.Message) -> bool:
-        return message.text == self.my_text
-
-
-class Switch(Filter):
-    def __init__(self, my_text: str) -> None:
-        self.my_text = my_text
-
-    async def __call__(self, message: types.Message) -> bool:
-        return message.text == self.my_text
+@dp.message(CommandStart())
+async def send_welcome(message: types.Message):
+    if language == 'en':
+        text = 'Hi! Send me a photo with text to hear it in English or Russian.'
+    else:
+        text = 'Привет! Отправь мне фото с текстом чтобы услышать его на Русском или Английском.'
+    await message.answer(text, reply_markup=inline_keyboard())
 
 
-@dp.message(AllCommands("/commands"))
+@dp.message(Command("/keyboard"))
+async def command_keyboard_handler(message: types.Message):
+    await message.answer(' ', reply_markup=keyboard())
+
+
+@dp.message(Command("/commands"))
 async def all_commands(message: types.Message):
-    await message.answer('/commands, /start, /clear, /change_language, /switch_audio_text_output')
+    await message.answer('/commands, /start, /clear, /change_language, /switch_audio_text_output, /keyboard')
 
 
-@dp.message(Switch("/switch_audio_text_output"))
+@dp.message(Command("/switch_audio_text_output"))
 async def switch_audio_text_output(message: types.Message):
     global switch_audio_text_output_flag
     if switch_audio_text_output_flag:
@@ -89,18 +108,7 @@ async def switch_audio_text_output(message: types.Message):
         switch_audio_text_output_flag = 1
 
 
-@dp.message(CommandStart())
-async def send_welcome(message: types.Message):
-    if language == 'en':
-        text = ('Hi! Send me a photo with text to hear it in English or Russian. Use the "/change_language" command to '
-                'switch the language. All functions are available in "/commands"')
-    else:
-        text = ('Привет! Отправь мне фото с текстом чтобы услышать его на Русском или Английском. Чтобы сменить язык '
-                'перевода используй команду "/change_language". Все функции доступны при введении "/commands"')
-    await message.answer(text)
-
-
-@dp.message(ClearCommand("/clear"))
+@dp.message(Command("/clear"))
 async def cmd_clear(message: types.Message):
     try:
         # delete all messages (message_id = 0)
@@ -109,6 +117,27 @@ async def cmd_clear(message: types.Message):
     except TelegramBadRequest as ex:
         pass
 
+
+@dp.message(Command('/change_language'))
+async def switch_language(message: types.Message):
+    global language
+
+    if language == 'en':
+        language = 'ru'
+        await message.answer("Язык был изменен на русский.")
+
+    elif language == 'ru':
+        language = 'en'
+        await message.answer("The language has been changed to English.")
+
+
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "keyboard"))
+async def my_callback_foo(query: CallbackQuery, callback_data: MyCallback):
+    if language == 'ru':
+        await query.message.answer('чтобы открыть все функции нажмите на /keyboard')
+    else:
+        await query.message.answer('to see all of the bot functions press /keyboard')
 
 @dp.message(F.photo)
 async def photo_handler(message: types.Message):
@@ -139,19 +168,6 @@ async def photo_handler(message: types.Message):
             audio = FSInputFile(path="OutputMP3file.mp3")
 
             await bot.send_audio(message.chat.id, audio=audio)
-
-
-@dp.message(ChangeLanguage('/change_language'))
-async def switch_language(message: types.Message):
-    global language
-
-    if language == 'en':
-        language = 'ru'
-        await message.answer("Язык был изменен на русский.")
-
-    elif language == 'ru':
-        language = 'en'
-        await message.answer("The language has been changed to English.")
 
 
 if __name__ == '__main__':
