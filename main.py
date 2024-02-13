@@ -1,13 +1,22 @@
-import aiogram
+import asyncio
 import easyocr
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.utils.exceptions import MessageTextIsEmpty
+from gtts import gTTS
+from translate import Translator
+
+from aiogram import Bot, types, Dispatcher, F
+from aiogram.types.input_file import FSInputFile
+from aiogram.filters import CommandStart, Filter
 
 
-TOKEN_API = '6210740611:AAFzDF02G1NEQbwqFJMq6gvp4Qrf8KswVD8'
+# Replace with your bot token
+TOKEN = '6210740611:AAFzDF02G1NEQbwqFJMq6gvp4Qrf8KswVD8'
 
-bot = Bot(TOKEN_API)
-dp = Dispatcher(bot)
+# Initialize the bot and dispatcher
+dp = Dispatcher()
+bot = Bot(TOKEN)
+
+# Set the initial language to English
+language = 'en'
 
 
 def text_recognition(file_path):
@@ -19,43 +28,61 @@ def text_recognition(file_path):
     return text1
 
 
-async def on_startup(_):
-    print('я включился')
+class ChangeLanguage(Filter):
+    def __init__(self, my_text: str) -> None:
+        self.my_text = my_text
+
+    async def __call__(self, message: types.Message) -> bool:
+        return message.text == self.my_text
 
 
-@dp.message_handler(commands=['start'])
-async def start_command(message: types.Message):
-    await message.answer('Привет, отправь мне фото')
+@dp.message(CommandStart())
+async def send_welcome(message: types.Message):
+    text = ('Hi! Send me a photo with text to hear it in English or Russian. Use the "/changelang" command to switch '
+            'the language.')
+    await message.answer(text)
 
 
-@dp.message_handler(commands=['поменять язык'])
-async def change_language(message: types.Message):
-    if message.text not in ['ru', 'en']:
-        await message.answer(text='Язык не распознан')
-
-
-@dp.message_handler(content_types=['document'])
-async def handle_docs_photo(message):
-    file_id = message.document.file_id
-    file = await bot.get_file(file_id)
-    file_path = file.file_path
-    await bot.download_file(file_path, "photo.jpg")
-    try:
-        await message.answer(text_recognition(r'F:\pycharm\ended_Pic_to_text_bot\photo.jpg'))
-    except MessageTextIsEmpty:
-        await message.answer('Я не вижу текста')
-
-
-@dp.message_handler(content_types=['photo'])
-async def handle_photo(message):
+@dp.message(F.photo)
+async def photo_handler(message: types.Message):
+    # Download the photo
+    await message.answer('обработка фото...')
     file = await bot.get_file(message.photo[len(message.photo) - 1].file_id)
     file_path = file.file_path
     await bot.download_file(file_path, "photo.jpg")
-    try:
-        await message.answer(text_recognition(r'F:\pycharm\ended_Pic_to_text_bot\photo.jpg'))
-    except MessageTextIsEmpty:
-        await message.answer('Я не вижу текста')
+
+    # Recognize text from the photo
+    result = text_recognition(r'F:\pycharm\ended_Pic_to_text_bot\photo.jpg')
+
+    if result:
+        # Translation to chosen language
+        text = Translator(to_lang=language).translate(result)
+
+        # Convert the recognized and translated text to speech
+        tts = gTTS(text=text, lang=language)
+        tts.save("OutputMP3file.mp3")
+        audio = FSInputFile(path="OutputMP3file.mp3")
+
+        await bot.send_audio(message.chat.id, audio=audio)
 
 
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+@dp.message(ChangeLanguage('/changelang'))
+async def switch_language(message: types.Message):
+    global language
+    if language == 'en':
+        language = 'ru'
+        await message.answer("The language has been changed to Russian.")
+    elif language == 'ru':
+        language = 'en'
+        await message.answer("The language has been changed to English.")
+
+
+async def main():
+    await dp.start_polling(bot)
+
+
+async def on_startup(_):
+    print('i am on')
+
+if __name__ == '__main__':
+    asyncio.run(main())
