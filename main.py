@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart, Filter
 from aiogram.exceptions import TelegramBadRequest
 
 
-# Replace with your bot token
+# Bot token
 TOKEN = '6210740611:AAFzDF02G1NEQbwqFJMq6gvp4Qrf8KswVD8'
 
 # Initialize the bot and dispatcher
